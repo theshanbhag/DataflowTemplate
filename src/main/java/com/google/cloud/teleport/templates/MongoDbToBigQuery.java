@@ -91,9 +91,9 @@ public class MongoDbToBigQuery {
 //        }
 //        System.out.println(">>>>>>>>>>>>>>>>>"+value.getClass().getName());
 //    });
-//    bigquerySchemaFields.add(new TableFieldSchema().setName("src_data").setType("STRING"));
-//    TableSchema bigquerySchema = new TableSchema().setFields(bigquerySchemaFields);
-//    /** For schema creation */
+    bigquerySchemaFields.add(new TableFieldSchema().setName("src_data").setType("STRING"));
+    TableSchema bigquerySchema = new TableSchema().setFields(bigquerySchemaFields);
+    /** For schema creation */
 
     TableReference table1 = new TableReference();
     table1.setProjectId(options.getProjectId());
@@ -101,36 +101,7 @@ public class MongoDbToBigQuery {
     table1.setTableId(options.getBigquerytable());
 
 
-//    pipeline
-//            .apply(
-//                  ReadJsonEntities.newBuilder()
-//                  .setUri(options.getUri())
-//                  .setDb(options.getDb())
-//                  .setColl(options.getColl()).build())
-//            .apply(
-//                    "Read Documents", MapElements.via(
-//                            new SimpleFunction<Document, TableRow>() {
-//                                @Override
-//                                public TableRow apply(Document document) {
-////                                    TableRow row = new TableRow();
-////                                    document.forEach((key, value) -> {
-////                                            row.set(key, value.toString());
-////                                    });
-////                                    return row;
-//                                    TableRow row = new TableRow();
-//                                    String source_data = document.toJson();
-//                                    row.set("src_data",source_data );
-//                                    return row;
-//                                }
-//                            }
-//                    )
-//            ).apply(BigQueryIO.writeTableRows()
-//                            .to(table1)
-//                            .withSchema(bigquerySchema)
-//                            .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-//                            .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
-//            );
-      pipeline
+    pipeline
             .apply(
                   ReadJsonEntities.newBuilder()
                   .setUri(options.getUri())
@@ -138,25 +109,54 @@ public class MongoDbToBigQuery {
                   .setColl(options.getColl()).build())
             .apply(
                     "Read Documents", MapElements.via(
-                            new SimpleFunction<Document, String>() {
+                            new SimpleFunction<Document, TableRow>() {
                                 @Override
-                                public String apply(Document document) {
-                                    String jsonDoc = document.toJson();
-                                    return jsonDoc;
+                                public TableRow apply(Document document) {
+//                                    TableRow row = new TableRow();
+//                                    document.forEach((key, value) -> {
+//                                            row.set(key, value.toString());
+//                                    });
+//                                    return row;
+                                    TableRow row = new TableRow();
+                                    String source_data = document.toJson();
+                                    row.set("src_data",source_data );
+                                    return row;
                                 }
-                            })
-            )
-            .apply(
-                BigQueryConverters.jsonToTableRow()
-            )
-              .apply(
-                      "WriteBigQuery",
-                      BigQueryIO.writeTableRows()
-                              .to(bqtable)
-                              .withSchema(bigquerySchema)
-                              .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-                              .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
-                              .withCustomGcsTempLocation(options.getBigQueryLoadingTemporaryDirectory()));
+                            }
+                    )
+            ).apply(BigQueryIO.writeTableRows()
+                            .to(table1)
+                            .withSchema(bigquerySchema)
+                            .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+                            .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
+            );
+//      pipeline
+//            .apply(
+//                  ReadJsonEntities.newBuilder()
+//                  .setUri(options.getUri())
+//                  .setDb(options.getDb())
+//                  .setColl(options.getColl()).build())
+//            .apply(
+//                    "Read Documents", MapElements.via(
+//                            new SimpleFunction<Document, String>() {
+//                                @Override
+//                                public String apply(Document document) {
+//                                    String jsonDoc = document.toJson();
+//                                    return jsonDoc;
+//                                }
+//                            })
+//            )
+//            .apply(
+//                BigQueryConverters.jsonToTableRow()
+//            )
+//              .apply(
+//                      "WriteBigQuery",
+//                      BigQueryIO.writeTableRows()
+//                              .to(bqtable)
+//                              .withSchema(bigquerySchema)
+//                              .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+//                              .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
+//                              .withCustomGcsTempLocation(options.getBigQueryLoadingTemporaryDirectory()));
     pipeline.run().waitUntilFinish();
   }
 
