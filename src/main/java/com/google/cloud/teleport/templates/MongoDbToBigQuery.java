@@ -14,6 +14,7 @@
  * the License.
  */
 package com.google.cloud.teleport.templates;
+import com.google.cloud.teleport.templates.common.MongoDbConverters;
 import com.google.cloud.teleport.templates.common.MongoDbConverters.MongoDbReadOptions;
 import com.google.cloud.teleport.templates.common.MongoDbConverters.ReadJsonEntities;
 import com.google.cloud.teleport.templates.common.JavascriptTextTransformer.TransformTextViaJavascript;
@@ -41,12 +42,12 @@ import com.google.api.services.bigquery.model.TableFieldSchema;
 import java.util.ArrayList;
 import java.util.List;
 import com.mongodb.util.JSON;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
-import static com.mongodb.client.model.Filters.eq;
+
+
 
 import com.google.cloud.teleport.templates.common.BigQueryConverters;
 
@@ -54,11 +55,24 @@ import com.google.cloud.teleport.templates.common.BigQueryConverters;
 /** Dataflow template which copies Datastore Entities to a BigQuery table. */
 public class MongoDbToBigQuery {
   public interface MongoDbToBigQueryOptions
-      extends PipelineOptions {
+      extends PipelineOptions, MongoDbReadOptions {
     @Description("The BigQuery table spec to write the output to")
-    ValueProvider<String> getOutputTableSpec();
+      String getProjectId();
+      String getBigquerydataset();
+      String getBigquerytable();
+      String getOutputTableSpec();
+      char getVersion();
+      ValueProvider<String> getBigQueryLoadingTemporaryDirectory();
 
-    void setOutputTableSpec(ValueProvider<String> value);
+
+      void setProjectId(String value);
+      void setBigquerydataset(String value);
+      void setBigquerytable(String value);
+      void setOutputTableSpec(String value);
+      void setVersion(char value);
+      void setBigQueryLoadingTemporaryDirectory(ValueProvider<String> value);
+
+
   }
 
   /**
@@ -69,44 +83,26 @@ public class MongoDbToBigQuery {
    * @param args arguments to the pipeline
    */
   public static void main(String[] args) {
-    Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
+//    Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
+    MongoDbToBigQueryOptions options =
+              PipelineOptionsFactory.fromArgs(args).withValidation().as(MongoDbToBigQueryOptions.class);
     Pipeline pipeline = Pipeline.create(options);
+    TableSchema bigquerySchema = MongoDbConverters.getTableFieldSchema(options.getVersion(), options.getUri(), options.getDb(), options.getColl());
 
-    MongoClient mongoClient = MongoClients.create(options.getUri());
-    MongoDatabase database = mongoClient.getDatabase(options.getDb());
-    MongoCollection<Document> collection = database.getCollection(options.getColl());
-    Document doc = collection.find().first();
-
-    List<TableFieldSchema> bigquerySchemaFields = new ArrayList<>();
-
-
-    /*  */
-//    doc.forEach((key, value) -> {
-//        if(value.getClass().getName()=="java.lang.String"){
-//            bigquerySchemaFields.add(new TableFieldSchema().setName(key).setType("STRING"));
-//        }else if(value.getClass().getName()=="java.lang.Integer"){
-//            bigquerySchemaFields.add(new TableFieldSchema().setName(key).setType("INT64"));
-//        }else {
-//            bigquerySchemaFields.add(new TableFieldSchema().setName(key).setType("STRING"));
-//        }
-//        System.out.println(">>>>>>>>>>>>>>>>>"+value.getClass().getName());
-//    });
-    bigquerySchemaFields.add(new TableFieldSchema().setName("src_data").setType("STRING"));
-    TableSchema bigquerySchema = new TableSchema().setFields(bigquerySchemaFields);
     /** For schema creation */
-
     TableReference table1 = new TableReference();
     table1.setProjectId(options.getProjectId());
     table1.setDatasetId(options.getBigquerydataset());
     table1.setTableId(options.getBigquerytable());
-
+    char version = options.getVersion();
 
     pipeline
             .apply(
-                  ReadJsonEntities.newBuilder()
-                  .setUri(options.getUri())
-                  .setDb(options.getDb())
-                  .setColl(options.getColl()).build())
+                    MongoDbIO.read().
+                            withUri(options.getUri()).
+                            withBucketAuto(true).
+                            withDatabase(options.getDb()).
+                            withCollection(options.getColl()))
             .apply(
                     "Read Documents", MapElements.via(
                             new SimpleFunction<Document, TableRow>() {
@@ -117,46 +113,33 @@ public class MongoDbToBigQuery {
 //                                            row.set(key, value.toString());
 //                                    });
 //                                    return row;
-                                    TableRow row = new TableRow();
-                                    String source_data = document.toJson();
-                                    row.set("src_data",source_data );
-                                    return row;
+                                        if(version == '1'){
+                                            String source_data = document.toJson();
+                                            DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+                                            LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
+                                            TableRow row = new TableRow()
+                                                    .set("Source_data",source_data)
+                                                    .set("timestamp", localdate.format(time_format));
+                                            return row;
+                                        }else {
+                                            TableRow row = new TableRow();
+                                            document.forEach((key, value) -> {
+                                                row.set(key, value.toString());
+                                            });
+                                            return row;
+                                        }
+
                                 }
                             }
                     )
+
             ).apply(BigQueryIO.writeTableRows()
-                            .to(table1)
-                            .withSchema(bigquerySchema)
-                            .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-                            .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
+                    .to(table1)
+                    .withSchema(bigquerySchema)
+                    .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+                    .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
             );
-//      pipeline
-//            .apply(
-//                  ReadJsonEntities.newBuilder()
-//                  .setUri(options.getUri())
-//                  .setDb(options.getDb())
-//                  .setColl(options.getColl()).build())
-//            .apply(
-//                    "Read Documents", MapElements.via(
-//                            new SimpleFunction<Document, String>() {
-//                                @Override
-//                                public String apply(Document document) {
-//                                    String jsonDoc = document.toJson();
-//                                    return jsonDoc;
-//                                }
-//                            })
-//            )
-//            .apply(
-//                BigQueryConverters.jsonToTableRow()
-//            )
-//              .apply(
-//                      "WriteBigQuery",
-//                      BigQueryIO.writeTableRows()
-//                              .to(bqtable)
-//                              .withSchema(bigquerySchema)
-//                              .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-//                              .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
-//                              .withCustomGcsTempLocation(options.getBigQueryLoadingTemporaryDirectory()));
+
     pipeline.run().waitUntilFinish();
   }
 

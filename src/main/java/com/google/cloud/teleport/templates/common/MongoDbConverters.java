@@ -17,11 +17,6 @@ package com.google.cloud.teleport.templates.common;
 
 import com.google.auto.value.AutoValue;
 import com.google.cloud.teleport.templates.common.ErrorConverters.ErrorMessage;
-import com.google.datastore.v1.ArrayValue;
-import com.google.datastore.v1.Entity;
-import com.google.datastore.v1.Key;
-import com.google.datastore.v1.PartitionId;
-import com.google.datastore.v1.Value;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.protobuf.CodedOutputStream;
@@ -33,8 +28,6 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Set;
-import org.apache.beam.sdk.io.gcp.datastore.DatastoreIO;
-import org.apache.beam.sdk.io.gcp.datastore.DatastoreV1;
 import org.apache.beam.sdk.metrics.Counter;
 import org.apache.beam.sdk.metrics.Metrics;
 import org.apache.beam.sdk.options.Default;
@@ -58,6 +51,23 @@ import org.apache.beam.sdk.values.TupleTagList;
 import org.bson.Document;
 import org.apache.beam.sdk.io.mongodb.MongoDbIO;
 import org.apache.beam.sdk.io.mongodb.MongoDbIO.Read;
+import org.apache.beam.sdk.options.Validation;
+import org.apache.beam.sdk.transforms.SimpleFunction;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import org.apache.beam.sdk.transforms.MapElements;
+import com.google.api.services.bigquery.model.TableRow;
+import com.google.api.services.bigquery.model.TableFieldSchema;
+import com.google.api.services.bigquery.model.TableSchema;
+import java.util.ArrayList;
+import java.util.List;
+
+import com.mongodb.client.MongoClient;
+import com.mongodb.client.MongoClients;
+import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import static com.mongodb.client.model.Filters.eq;
 
 /** Transforms & DoFns & Options for Teleport DatastoreIO. */
 public class MongoDbConverters {
@@ -65,108 +75,25 @@ public class MongoDbConverters {
     /** Options for Reading MongoDb Documents. */
     public interface  MongoDbReadOptions extends PipelineOptions {
 
-        @Description("MongoDb Database name to read the data from")
-        ValueProvider<String> getMongoDbReadDb();
+        @Description("MongoDB URI for connecting to MongoDB Cluster")
+        String getUri();
 
-        void setMongoDbReadDb(ValueProvider<String> mongoDbReadDb);
+        @Description("MongoDb Database name to read the data from")
+        String getDb();
 
         @Description("MongoDb collection to read the data from")
-        ValueProvider<String> getMongoDbReadColl();
+        String getColl();
 
-        void setMongoDbReadColl(ValueProvider<String> mongoDbReadColl);
+        void setUri(String value);
 
-        @Description("MongoDb URI for the cluster to connect to")
-        ValueProvider<String> getMongoDbReadUri();
+        void setDb(String value);
 
-        void setMongoDbReadUri(ValueProvider<String> mongoDbReadUri);
+        void setColl(String value);
+
+        void setProjectId(String value);
+
     }
 
-    /** Options for writing Datastore Entities. */
-//    public interface DatastoreWriteOptions extends PipelineOptions {
-//        /** @deprecated Please use getFirestoreWriteProjectId() instead. */
-//        @Description("GCP Project Id of where to write the datastore entities")
-//        @Hidden
-//        @Deprecated
-//        ValueProvider<String> getDatastoreWriteProjectId();
-//
-//        /** @deprecated Please use setFirestoreWriteProjectId(value) instead. */
-//        @Hidden
-//        @Deprecated
-//        void setDatastoreWriteProjectId(ValueProvider<String> datstoreWriteProjectId);
-//
-//        /** @deprecated Please use getFirestoreWriteEntityKind() instead. */
-//        @Description("Kind of the Datastore entity")
-//        @Hidden
-//        @Deprecated
-//        ValueProvider<String> getDatastoreWriteEntityKind();
-//
-//        /** @deprecated Please use setFirestoreWriteEntityKind(value) instead. */
-//        @Hidden
-//        @Deprecated
-//        void setDatastoreWriteEntityKind(ValueProvider<String> value);
-//
-//        /** @deprecated Please use getFirestoreWriteNamespace() instead. */
-//        @Description("Namespace of the Datastore entity")
-//        @Hidden
-//        @Deprecated
-//        ValueProvider<String> getDatastoreWriteNamespace();
-//
-//        /** @deprecated Please use setFirestoreWriteNamespace(value) instead. */
-//        @Hidden
-//        @Deprecated
-//        void setDatastoreWriteNamespace(ValueProvider<String> value);
-//
-//        /** @deprecated Please use getFirestoreHintNumWorkers() instead. */
-//        @Description("Hint for the expected number of workers in the ramp-up throttling step")
-//        @Default.Integer(500)
-//        @Hidden
-//        @Deprecated
-//        ValueProvider<Integer> getDatastoreHintNumWorkers();
-//
-//        /** @deprecated Please use setFirestoreHintNumWorkers(value) instead. */
-//        @Hidden
-//        @Deprecated
-//        void setDatastoreHintNumWorkers(ValueProvider<Integer> value);
-//
-//        @Description("GCP Project Id of where to write the datastore entities")
-//        ValueProvider<String> getFirestoreWriteProjectId();
-//
-//        void setFirestoreWriteProjectId(ValueProvider<String> firestoreWriteProjectId);
-//
-//        @Description("Kind of the Datastore entity")
-//        ValueProvider<String> getFirestoreWriteEntityKind();
-//
-//        void setFirestoreWriteEntityKind(ValueProvider<String> value);
-//
-//        @Description("Namespace of the Datastore entity")
-//        ValueProvider<String> getFirestoreWriteNamespace();
-//
-//        void setFirestoreWriteNamespace(ValueProvider<String> value);
-//
-//        @Description("Hint for the expected number of workers in the ramp-up throttling step")
-//        ValueProvider<Integer> getFirestoreHintNumWorkers();
-//
-//        void setFirestoreHintNumWorkers(ValueProvider<Integer> value);
-//    }
-
-    /** Options for deleting Datastore Entities. */
-//    public interface DatastoreDeleteOptions extends PipelineOptions {
-//
-//        @Description("GCP Project Id of where to delete the datastore entities")
-//        ValueProvider<String> getFirestoreDeleteProjectId();
-//
-//        void setFirestoreDeleteProjectId(ValueProvider<String> firestoreDeleteProjectId);
-//
-//        @Description("Hint for the expected number of workers in the ramp-up throttling step")
-//        ValueProvider<Integer> getFirestoreHintNumWorkers();
-//
-//        void setFirestoreHintNumWorkers(ValueProvider<Integer> value);
-//    }
-
-    /** Options for reading Unique datastore Schemas. */
-//    public interface DatastoreReadSchemaCountOptions extends DatastoreReadOptions {}
-
-    /** Reads Entities as JSON from Datastore. */
     @AutoValue
     public abstract static class ReadJsonEntities extends PTransform<PBegin, PCollection<Document>> {
 
@@ -204,7 +131,56 @@ public class MongoDbConverters {
                             withDatabase(db()).
                             withCollection(coll()));
         }
+
+
     }
+
+    public static TableSchema getTableFieldSchema(char version, String uri, String db, String coll ){
+        List<TableFieldSchema> bigquerySchemaFields = new ArrayList<>();
+        if(version == '1'){
+            bigquerySchemaFields.add(new TableFieldSchema().setName("Source_data").setType("STRING"));
+            bigquerySchemaFields.add(new TableFieldSchema().setName("timestamp").setType("TIMESTAMP"));
+        }else if(version == '2'){
+            MongoClient mongoClient = MongoClients.create(uri);
+            MongoDatabase database = mongoClient.getDatabase(db);
+            MongoCollection<Document> collection = database.getCollection(coll);
+            Document doc = collection.find().first();
+            doc.forEach((key, value) ->
+                {
+                    if(value.getClass().getName()=="java.lang.String"){
+                        bigquerySchemaFields.add(new TableFieldSchema().setName(key).setType("STRING"));
+                    }else if(value.getClass().getName()=="java.lang.Integer"){
+                        bigquerySchemaFields.add(new TableFieldSchema().setName(key).setType("INT64"));
+                    }else if(value.getClass().getName()=="java.lang.Long"){
+                        bigquerySchemaFields.add(new TableFieldSchema().setName(key).setType("FLOAT"));
+                    }else {
+                        bigquerySchemaFields.add(new TableFieldSchema().setName(key).setType("STRING"));
+                    }
+                }
+            );
+        }
+
+        TableSchema bigquerySchema = new TableSchema().setFields(bigquerySchemaFields);
+        return bigquerySchema;
+    }
+
+//    public class BuildRowFromDocument {
+//        @Override
+//        public TableRow apply(Document document) {
+////                                    TableRow row = new TableRow();
+////                                    document.forEach((key, value) -> {
+////                                            row.set(key, value.toString());
+////                                    });
+////                                    return row;
+//            String source_data = document.toJson();
+//            DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+//            LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
+//            TableRow row = new TableRow()
+//                    .set("Source_data",source_data)
+//                    .set("timestamp", localdate.format(time_format));
+//            return row;
+//        }
+//    }
 
     /** Writes Entities encoded in JSON to Datastore. */
 //    @AutoValue
