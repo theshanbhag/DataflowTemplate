@@ -16,7 +16,7 @@
 package com.google.cloud.teleport.templates;
 import com.google.cloud.teleport.templates.common.MongoDbConverters;
 import com.google.cloud.teleport.templates.common.MongoDbConverters.MongoDbReadOptions;
-import com.google.cloud.teleport.templates.common.MongoDbConverters.ReadJsonEntities;
+import com.google.cloud.teleport.templates.common.MongoDbConverters.BigQueryWriteOptions;
 import com.google.cloud.teleport.templates.common.JavascriptTextTransformer.TransformTextViaJavascript;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
@@ -55,46 +55,37 @@ import com.google.cloud.teleport.templates.common.BigQueryConverters;
 /** Dataflow template which copies Datastore Entities to a BigQuery table. */
 public class MongoDbToBigQuery {
   public interface MongoDbToBigQueryOptions
-      extends PipelineOptions, MongoDbReadOptions {
+      extends PipelineOptions, MongoDbReadOptions, BigQueryWriteOptions {
     @Description("The BigQuery table spec to write the output to")
       String getProjectId();
-      String getBigquerydataset();
-      String getBigquerytable();
-      String getOutputTableSpec();
-      char getVersion();
-      ValueProvider<String> getBigQueryLoadingTemporaryDirectory();
-
+      char getScope();
 
       void setProjectId(String value);
-      void setBigquerydataset(String value);
-      void setBigquerytable(String value);
-      void setOutputTableSpec(String value);
-      void setVersion(char value);
-      void setBigQueryLoadingTemporaryDirectory(ValueProvider<String> value);
-
+      void setScope(char value);
 
   }
 
   /**
-   * Runs a pipeline which reads in Entities from MongoDB, passes in the JSON encoded Entities to
-   * a returns JSON that conforms to the BigQuery TableRow spec and writes the
+   * Runs a pipeline which reads in Documents from MongoDB
+   * a returns JSON string that conforms to the BigQuery TableRow spec and writes the
    * TableRows to BigQuery.
    *
    * @param args arguments to the pipeline
    */
   public static void main(String[] args) {
-//    Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
     MongoDbToBigQueryOptions options =
               PipelineOptionsFactory.fromArgs(args).withValidation().as(MongoDbToBigQueryOptions.class);
     Pipeline pipeline = Pipeline.create(options);
-    TableSchema bigquerySchema = MongoDbConverters.getTableFieldSchema(options.getVersion(), options.getUri(), options.getDb(), options.getColl());
+    TableSchema bigquerySchema = MongoDbConverters.getTableFieldSchema(options.getScope(), options.getUri(), options.getDb(), options.getColl());
+    System.out.println("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n"+bigquerySchema+"\n\n");
 
-    /** For schema creation */
-    TableReference table1 = new TableReference();
-    table1.setProjectId(options.getProjectId());
-    table1.setDatasetId(options.getBigquerydataset());
-    table1.setTableId(options.getBigquerytable());
-    char version = options.getVersion();
+
+    /** Create BigQuery schema */
+    TableReference bigQyertTable = new TableReference();
+    bigQyertTable.setProjectId(options.getProjectId());
+    bigQyertTable.setDatasetId(options.getBigquerydataset());
+    bigQyertTable.setTableId(options.getBigquerytable());
+    char scope = options.getScope();
 
     pipeline
             .apply(
@@ -108,12 +99,7 @@ public class MongoDbToBigQuery {
                             new SimpleFunction<Document, TableRow>() {
                                 @Override
                                 public TableRow apply(Document document) {
-//                                    TableRow row = new TableRow();
-//                                    document.forEach((key, value) -> {
-//                                            row.set(key, value.toString());
-//                                    });
-//                                    return row;
-                                        if(version == '1'){
+                                        if(scope == '1'){
                                             String source_data = document.toJson();
                                             DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
                                             LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
@@ -134,7 +120,7 @@ public class MongoDbToBigQuery {
                     )
 
             ).apply(BigQueryIO.writeTableRows()
-                    .to(table1)
+                    .to(bigQyertTable)
                     .withSchema(bigquerySchema)
                     .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
                     .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
@@ -143,26 +129,5 @@ public class MongoDbToBigQuery {
     pipeline.run().waitUntilFinish();
   }
 
-  public interface Options extends PipelineOptions {
 
-        @Description("Table to write to, specified as " + "<project_id>:<dataset_id>.<table_id>")
-        @Validation.Required
-        String getUri();
-        String getDb();
-        String getColl();
-        String getProjectId();
-        String getBigquerydataset();
-        String getBigquerytable();
-        String getOutputTableSpec();
-        ValueProvider<String> getBigQueryLoadingTemporaryDirectory();
-
-        void setUri(String value);
-        void setDb(String value);
-        void setColl(String value);
-        void setProjectId(String value);
-        void setBigquerydataset(String value);
-        void setBigquerytable(String value);
-        void setOutputTableSpec(String value);
-        void setBigQueryLoadingTemporaryDirectory(ValueProvider<String> value);
-  }
 }
