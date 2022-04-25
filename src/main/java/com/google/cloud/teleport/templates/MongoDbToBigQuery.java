@@ -16,7 +16,7 @@
 package com.google.cloud.teleport.templates;
 import com.google.cloud.teleport.templates.common.MongoDbConverters;
 import com.google.cloud.teleport.templates.common.MongoDbConverters.MongoDbReadOptions;
-import com.google.cloud.teleport.templates.common.MongoDbConverters.BigQueryWriteOptions;
+import com.google.cloud.teleport.templates.common.MongoDbConverters.BigQueryOptions;
 import com.google.cloud.teleport.templates.common.JavascriptTextTransformer.TransformTextViaJavascript;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
@@ -45,6 +45,8 @@ import com.mongodb.util.JSON;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.lang.reflect.Method;
+
 
 
 
@@ -55,7 +57,7 @@ import com.google.cloud.teleport.templates.common.BigQueryConverters;
 /** Dataflow template which copies Datastore Entities to a BigQuery table. */
 public class MongoDbToBigQuery {
   public interface MongoDbToBigQueryOptions
-      extends PipelineOptions, MongoDbReadOptions, BigQueryWriteOptions {
+      extends PipelineOptions, MongoDbReadOptions, BigQueryOptions {
     @Description("The BigQuery table spec to write the output to")
       String getProjectId();
       char getScope();
@@ -72,62 +74,64 @@ public class MongoDbToBigQuery {
    *
    * @param args arguments to the pipeline
    */
-  public static void main(String[] args) {
-    MongoDbToBigQueryOptions options =
-              PipelineOptionsFactory.fromArgs(args).withValidation().as(MongoDbToBigQueryOptions.class);
-    Pipeline pipeline = Pipeline.create(options);
-    TableSchema bigquerySchema = MongoDbConverters.getTableFieldSchema(options.getScope(), options.getUri(), options.getDb(), options.getColl());
-    System.out.println("\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>\n"+bigquerySchema+"\n\n");
+    public static void main(String[] args) {
+        MongoDbToBigQueryOptions options =
+                  PipelineOptionsFactory.fromArgs(args).withValidation().as(MongoDbToBigQueryOptions.class);
+        Pipeline pipeline = Pipeline.create(options);
+        TableSchema bigquerySchema =
+                MongoDbConverters.getTableFieldSchema(options.getScope(), options.getUri(), options.getDb(), options.getColl());
 
+        /** Create BigQuery schema */
+        TableReference bigQyertTable = new TableReference();
+        bigQyertTable.setProjectId(options.getProjectId());
+        bigQyertTable.setDatasetId(options.getBigquerydataset());
+        bigQyertTable.setTableId(options.getBigquerytable());
+        char scope = options.getScope();
 
-    /** Create BigQuery schema */
-    TableReference bigQyertTable = new TableReference();
-    bigQyertTable.setProjectId(options.getProjectId());
-    bigQyertTable.setDatasetId(options.getBigquerydataset());
-    bigQyertTable.setTableId(options.getBigquerytable());
-    char scope = options.getScope();
-
-    pipeline
-            .apply(
-                    MongoDbIO.read().
-                            withUri(options.getUri()).
-                            withBucketAuto(true).
-                            withDatabase(options.getDb()).
-                            withCollection(options.getColl()))
-            .apply(
-                    "Read Documents", MapElements.via(
-                            new SimpleFunction<Document, TableRow>() {
-                                @Override
-                                public TableRow apply(Document document) {
-                                        if(scope == '1'){
-                                            String source_data = document.toJson();
-                                            DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-                                            LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
-                                            TableRow row = new TableRow()
-                                                    .set("Source_data",source_data)
-                                                    .set("timestamp", localdate.format(time_format));
-                                            return row;
-                                        }else {
-                                            TableRow row = new TableRow();
-                                            document.forEach((key, value) -> {
-                                                row.set(key, value.toString());
-                                            });
-                                            return row;
-                                        }
-
+        pipeline
+                .apply(
+                        MongoDbIO.read().
+                                withUri(options.getUri()).
+                                withBucketAuto(true).
+                                withDatabase(options.getDb()).
+                                withCollection(options.getColl())
+                ).apply(
+                        "Read Documents", MapElements.via(
+                                new SimpleFunction<Document, TableRow>() {
+                                    @Override
+                                    public TableRow apply(Document document) {
+                                        return MongoDbConverters.generateTableRow(document, scope);
+                                    }
                                 }
-                            }
-                    )
+                        )
 
-            ).apply(BigQueryIO.writeTableRows()
-                    .to(bigQyertTable)
-                    .withSchema(bigquerySchema)
-                    .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
-                    .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
-            );
+                ).apply(
+                        BigQueryIO.writeTableRows()
+                        .to(bigQyertTable)
+                        .withSchema(bigquerySchema)
+                        .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
+                        .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
+                );
 
-    pipeline.run().waitUntilFinish();
-  }
+        pipeline.run().waitUntilFinish();
+    }
 
 
+//    public static TableRow generateDocumentTableRow(Document document){
+//        String source_data = document.toJson();
+//        DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+//        LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
+//        TableRow row = new TableRow()
+//                .set("Source_data",source_data)
+//                .set("timestamp", localdate.format(time_format));
+//        return row;
+//    }
+
+//    public static TableRow generateFieldTableRow(Document document){
+//        TableRow row = new TableRow();
+//        document.forEach((key, value) -> {
+//            row.set(key, value.toString());
+//        });
+//        return row;
+//    }
 }

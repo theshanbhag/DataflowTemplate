@@ -94,7 +94,7 @@ public class MongoDbConverters {
 
     }
 
-    public interface  BigQueryWriteOptions extends PipelineOptions {
+    public interface  BigQueryOptions extends PipelineOptions {
 
         @Description("BigQuery Dataset Id to write to")
         String getBigquerydataset();
@@ -149,7 +149,7 @@ public class MongoDbConverters {
                         bigquerySchemaFields.add(
                                 new TableFieldSchema()
                                         .setName(key)
-                                        .setType("DATE")
+                                        .setType("STRING")
                         );
                     }
                     else
@@ -167,5 +167,50 @@ public class MongoDbConverters {
 
         TableSchema bigquerySchema = new TableSchema().setFields(bigquerySchemaFields);
         return bigquerySchema;
+    }
+
+    public static TableRow generateDocumentTableRow(Document document){
+        String source_data = document.toJson();
+        DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+        LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
+        TableRow row = new TableRow()
+                .set("Source_data",source_data)
+                .set("timestamp", localdate.format(time_format));
+        return row;
+    }
+
+    public static TableRow generateFieldTableRow(Document document){
+        TableRow row = new TableRow();
+        document.forEach((key, value) -> {
+            row.set(key, value.toString());
+        });
+        return row;
+    }
+
+    public static TableRow generateTableRow(Document document, char scope){
+
+        if(scope == '1'){
+            String source_data = document.toJson();
+            DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+            LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
+            TableRow row = new TableRow()
+                    .set("Source_data",source_data)
+                    .set("timestamp", localdate.format(time_format));
+            return row;
+        }else {
+            TableRow row = new TableRow();
+            document.forEach((key, value) -> {
+                if(value.getClass().getName()=="java.util.Date"){
+                    System.out.println(value.toString()+">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
+//                    System.out.println("\n>>>>>>>>>>>>>"+value+">>>>>>>>>>"+value.getClass().getName()+"\n");
+//                    DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
+//                    LocalDateTime datetime = LocalDateTime.parse(value.toString(), time_format);
+                    row.set(key, value.toString());
+                }else{
+                    row.set(key, value.toString());
+                }
+            });
+            return row;
+        }
     }
 }
