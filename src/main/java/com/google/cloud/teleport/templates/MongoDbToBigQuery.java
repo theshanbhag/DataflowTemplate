@@ -54,7 +54,7 @@ import java.io.Serializable;
 import com.google.cloud.teleport.templates.common.BigQueryConverters;
 
 
-/** Dataflow template which copies Datastore Entities to a BigQuery table. */
+/** Dataflow template which copies documents to a BigQuery table. */
 public class MongoDbToBigQuery implements Serializable {
   public interface MongoDbToBigQueryOptions
       extends PipelineOptions, MongoDbReadOptions, BigQueryOptions {
@@ -118,23 +118,4 @@ public class MongoDbToBigQuery implements Serializable {
 
         pipeline.run().waitUntilFinish();
     }
-
-
-//    public static TableRow generateDocumentTableRow(Document document){
-//        String source_data = document.toJson();
-//        DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-//        LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
-//        TableRow row = new TableRow()
-//                .set("Source_data",source_data)
-//                .set("timestamp", localdate.format(time_format));
-//        return row;
-//    }
-
-//    public static TableRow generateFieldTableRow(Document document){
-//        TableRow row = new TableRow();
-//        document.forEach((key, value) -> {
-//            row.set(key, value.toString());
-//        });
-//        return row;
-//    }
 }

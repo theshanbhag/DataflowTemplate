@@ -138,7 +138,6 @@ public class MongoDbUtils {
                                         .setType("STRING")
                         );
                     }
-                    System.out.println(">>>>>>>>> " + value.getClass().getName());
                 }
             );
         }
