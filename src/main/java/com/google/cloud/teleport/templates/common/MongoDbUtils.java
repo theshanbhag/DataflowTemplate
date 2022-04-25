@@ -21,33 +21,10 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.protobuf.CodedOutputStream;
 import com.google.protobuf.InvalidProtocolBufferException;
-import com.google.protobuf.util.JsonFormat;
-import com.google.protobuf.util.JsonFormat.TypeRegistry;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Set;
-import org.apache.beam.sdk.metrics.Counter;
-import org.apache.beam.sdk.metrics.Metrics;
-import org.apache.beam.sdk.options.Default;
 import org.apache.beam.sdk.options.Description;
-import org.apache.beam.sdk.options.Hidden;
 import org.apache.beam.sdk.options.PipelineOptions;
-import org.apache.beam.sdk.options.ValueProvider;
-import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
 import org.apache.beam.sdk.transforms.Count;
-import org.apache.beam.sdk.transforms.DoFn;
-import org.apache.beam.sdk.transforms.GroupByKey;
-import org.apache.beam.sdk.transforms.PTransform;
-import org.apache.beam.sdk.transforms.ParDo;
-import org.apache.beam.sdk.values.KV;
-import org.apache.beam.sdk.values.PBegin;
-import org.apache.beam.sdk.values.PCollection;
-import org.apache.beam.sdk.values.PCollectionTuple;
-import org.apache.beam.sdk.values.PDone;
-import org.apache.beam.sdk.values.TupleTag;
-import org.apache.beam.sdk.values.TupleTagList;
 import org.bson.Document;
 import org.apache.beam.sdk.io.mongodb.MongoDbIO;
 import org.apache.beam.sdk.io.mongodb.MongoDbIO.Read;
@@ -62,6 +39,10 @@ import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableSchema;
 import java.util.ArrayList;
 import java.util.List;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+
 
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
@@ -69,8 +50,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import static com.mongodb.client.model.Filters.eq;
 
-/** Transforms & DoFns & Options for Teleport DatastoreIO. */
-public class MongoDbConverters {
+public class MongoDbUtils {
 
     /** Options for Reading MongoDb Documents. */
     public interface  MongoDbReadOptions extends PipelineOptions {
@@ -78,19 +58,17 @@ public class MongoDbConverters {
         @Description("MongoDB URI for connecting to MongoDB Cluster")
         String getUri();
 
+        void setUri(String value);
+
         @Description("MongoDb Database name to read the data from")
         String getDb();
+
+        void setDb(String value);
 
         @Description("MongoDb collection to read the data from")
         String getColl();
 
-        void setUri(String value);
-
-        void setDb(String value);
-
         void setColl(String value);
-
-        void setProjectId(String value);
 
     }
 
@@ -149,7 +127,7 @@ public class MongoDbConverters {
                         bigquerySchemaFields.add(
                                 new TableFieldSchema()
                                         .setName(key)
-                                        .setType("STRING")
+                                        .setType("DATE")
                         );
                     }
                     else
@@ -201,10 +179,6 @@ public class MongoDbConverters {
             TableRow row = new TableRow();
             document.forEach((key, value) -> {
                 if(value.getClass().getName()=="java.util.Date"){
-                    System.out.println(value.toString()+">>>>>>>>>>>>>>>>>>>>>>>>>>>>");
-//                    System.out.println("\n>>>>>>>>>>>>>"+value+">>>>>>>>>>"+value.getClass().getName()+"\n");
-//                    DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-//                    LocalDateTime datetime = LocalDateTime.parse(value.toString(), time_format);
                     row.set(key, value.toString());
                 }else{
                     row.set(key, value.toString());
