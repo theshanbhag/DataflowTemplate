@@ -71,7 +71,8 @@ public class MongoDbUtils {
 
     public static TableSchema getTableFieldSchema(String uri, String db, String coll ){
         List<TableFieldSchema> bigquerySchemaFields = new ArrayList<>();
-        bigquerySchemaFields.add(new TableFieldSchema().setName("Source_data").setType("STRING"));
+        bigquerySchemaFields.add(new TableFieldSchema().setName("id").setType("STRING"));
+        bigquerySchemaFields.add(new TableFieldSchema().setName("source_data").setType("STRING"));
         bigquerySchemaFields.add(new TableFieldSchema().setName("timestamp").setType("TIMESTAMP"));
         TableSchema bigquerySchema = new TableSchema().setFields(bigquerySchemaFields);
         return bigquerySchema;
@@ -81,8 +82,14 @@ public class MongoDbUtils {
         String source_data = document.toJson();
         DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
         LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
+
+        StringBuffer sb = new StringBuffer();
+        sb.append(source_data);
+        sb.replace(1, 45, "");
+        String sourceDataUpdated = sb.toString();
         TableRow row = new TableRow()
-                .set("Source_data",source_data)
+                .set("id",document.getObjectId("_id").toString())
+                .set("source_data",sourceDataUpdated)
                 .set("timestamp", localdate.format(time_format));
         return row;
     }
