@@ -15,7 +15,7 @@
  */
 package com.google.cloud.teleport.templates;
 import com.google.cloud.teleport.templates.common.MongoDbUtils;
-import com.google.cloud.teleport.templates.common.MongoDbUtils.MongoDbReadOptions;
+import com.google.cloud.teleport.templates.common.MongoDbUtils.MongoDbOptions;
 import com.google.cloud.teleport.templates.common.MongoDbUtils.BigQueryOptions;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
@@ -39,7 +39,7 @@ import com.google.api.services.bigquery.model.TableReference;
 /** Dataflow template which copies MongoDb document to a BigQuery table. */
 public class MongoDbToBigQuery {
   public interface MongoDbToBigQueryOptions
-      extends PipelineOptions, MongoDbReadOptions, BigQueryOptions {
+      extends PipelineOptions, MongoDbOptions, BigQueryOptions {
     @Description("The BigQuery table spec to write the output to")
       String getProjectId();
 

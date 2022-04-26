@@ -35,7 +35,7 @@ import java.util.List;
 public class MongoDbUtils {
 
     /** Options for Reading MongoDb Documents. */
-    public interface  MongoDbReadOptions extends PipelineOptions {
+    public interface  MongoDbOptions extends PipelineOptions {
 
         @Description("MongoDB URI for connecting to MongoDB Cluster")
         String getUri();
