@@ -70,7 +70,7 @@ public class BigQueryToMongoDb {
                         .withCollection(options.getColl())
                        );
 
-        p.run().waitUntilFinish();
+        p.run();
     }
 
 }

@@ -91,6 +91,6 @@ public class MongoDbToBigQuery {
                         .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
                 );
 
-        pipeline.run().waitUntilFinish();
+        pipeline.run();
     }
 }
