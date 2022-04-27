@@ -16,7 +16,7 @@
 package com.google.cloud.teleport.templates;
 import com.google.cloud.teleport.templates.common.MongoDbUtils;
 import com.google.cloud.teleport.templates.common.MongoDbUtils.MongoDbOptions;
-import com.google.cloud.teleport.templates.common.MongoDbUtils.BigQueryOptions;
+import com.google.cloud.teleport.templates.common.MongoDbUtils.BigQueryWriteOptions;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
@@ -34,13 +34,19 @@ import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableReference;
+import org.apache.beam.sdk.options.ValueProvider;
+import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
+import java.io.Serializable;
+import org.apache.beam.sdk.options.Default;
 
 
 /** Dataflow template which copies MongoDb document to a BigQuery table. */
-public class MongoDbToBigQuery {
+public class MongoDbToBigQuery implements Serializable {
   public interface MongoDbToBigQueryOptions
-      extends PipelineOptions, MongoDbOptions, BigQueryOptions {
-    @Description("The BigQuery table spec to write the output to")
+      extends PipelineOptions, MongoDbOptions, BigQueryWriteOptions {
+
+
+
       String getProjectId();
 
       void setProjectId(String value);
@@ -54,26 +60,23 @@ public class MongoDbToBigQuery {
    * @param args arguments to the pipeline
    */
     public static void main(String[] args) {
-        MongoDbToBigQueryOptions options =
-                  PipelineOptionsFactory.fromArgs(args).withValidation().as(MongoDbToBigQueryOptions.class);
-        Pipeline pipeline = Pipeline.create(options);
-        TableSchema bigquerySchema =
-                MongoDbUtils.getTableFieldSchema(options.getUri(), options.getDb(), options.getColl());
 
-        /** Create BigQuery schema */
-        TableReference bigQyertTable = new TableReference();
-        bigQyertTable.setProjectId(options.getProjectId());
-        bigQyertTable.setDatasetId(options.getBigquerydataset());
-        bigQyertTable.setTableId(options.getBigquerytable());
+        MongoDbToBigQueryOptions options =
+                PipelineOptionsFactory.fromArgs(args).withValidation()
+                        .as(MongoDbToBigQueryOptions.class);
+        Pipeline pipeline = Pipeline.create(options);
+        TableSchema bigquerySchema = MongoDbUtils.getTableFieldSchema();
 
         pipeline
                 .apply(
+                        "Reading from MongoDB ",
                         MongoDbIO.read().
-                                withUri(options.getUri()).
                                 withBucketAuto(true).
-                                withDatabase(options.getDb()).
-                                withCollection(options.getColl())
-                ).apply(
+                                withUri(MongoDbUtils.translateJDBCUrl(options.getMongoDbUri().get())).
+                                withDatabase(MongoDbUtils.translateJDBCUrl(options.getDatabase().get())).
+                                withCollection(MongoDbUtils.translateJDBCUrl(options.getCollection().get()))
+                )
+                .apply(
                         "Read Documents", MapElements.via(
                                 new SimpleFunction<Document, TableRow>() {
                                     @Override
@@ -83,9 +86,10 @@ public class MongoDbToBigQuery {
                                 }
                         )
 
-                ).apply(
+                )
+                .apply(
                         BigQueryIO.writeTableRows()
-                        .to(bigQyertTable)
+                        .to(options.getOutputTableSpec())
                         .withSchema(bigquerySchema)
                         .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
                         .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)

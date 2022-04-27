@@ -17,12 +17,13 @@ import org.apache.beam.sdk.transforms.SimpleFunction;
 import org.apache.beam.sdk.values.PCollection;
 import org.bson.Document;
 import com.google.cloud.teleport.templates.common.MongoDbUtils;
-import com.google.cloud.teleport.templates.common.MongoDbUtils.BigQueryOptions;
 import com.google.cloud.teleport.templates.common.MongoDbUtils.MongoDbOptions;
+import com.google.cloud.teleport.templates.common.MongoDbUtils.BigQueryReadOptions;
+import java.io.Serializable;
 
-public class BigQueryToMongoDb {
+public class BigQueryToMongoDb implements Serializable{
 
-    public interface Options extends PipelineOptions, GcpOptions, MongoDbOptions, BigQueryOptions {
+    public interface Options extends PipelineOptions, GcpOptions, MongoDbOptions, BigQueryReadOptions {
 
         String getProjectId();
 
@@ -31,46 +32,38 @@ public class BigQueryToMongoDb {
 
     public static void main(String[] args) throws Exception {
 
-        // Read options from command line.
         Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
-        Pipeline p = Pipeline.create(options);
-
-        System.out.println("mongoURI *********************" + options.getUri());
-        System.out.println("project *********************" + options.getProject());
-
-        TableReference tableSpec =
-                new TableReference()
-                        .setDatasetId(options.getBigquerydataset())
-                        .setTableId(options.getBigquerytable());
+        Pipeline pipeline = Pipeline.create(options);
 
         PCollection<TableRow> bigQueryDataset =
-                p.apply(BigQueryIO.readTableRows().from(tableSpec));
+                pipeline.apply(
+                        BigQueryIO
+                                .readTableRows()
+                                .withoutValidation()
+                                .from(options.getInputTableSpec())
+                );
 
-        bigQueryDataset.apply("bigQueryDataset", MapElements.via(
-                new SimpleFunction<TableRow, Document>() {
-                    @Override
-                    public Document apply(TableRow row) {
+        bigQueryDataset
+                .apply("bigQueryDataset", MapElements.via
+                        (new SimpleFunction<TableRow, Document>() {
+                            @Override
+                            public Document apply(TableRow row) {
+                                Document doc = new Document();
+                                row.forEach((key, value) ->
+                                {
+                                    doc.append(key, value);
+                                });
+                                return doc;
+                            }
+                        })
+                )
+                .apply(
+                        MongoDbIO.write()
+                                .withUri(MongoDbUtils.translateJDBCUrl(options.getMongoDbUri().get()))
+                                .withDatabase(MongoDbUtils.translateJDBCUrl(options.getDatabase().get()))
+                                .withCollection(MongoDbUtils.translateJDBCUrl(options.getCollection().get())));
 
-                        String id = row.get("id").toString();
-                        Object source = row.get("source_data");
-                        String timestamp = row.get("timestamp").toString();
-
-                        Document doc = new Document();
-                        doc.append("_id", id)
-                                .append("source_data", source)
-                                .append("timestamp", timestamp);
-                        return doc;
-
-                    }
-                }
-        )).apply(
-                MongoDbIO.write()
-                        .withUri(options.getUri())
-                        .withDatabase(options.getDb())
-                        .withCollection(options.getColl())
-                       );
-
-        p.run();
+        pipeline.run();
     }
 
 }

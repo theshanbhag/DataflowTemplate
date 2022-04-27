@@ -15,61 +15,78 @@
  */
 package com.google.cloud.teleport.templates.common;
 
-import java.util.Set;
 import org.apache.beam.sdk.options.PipelineOptions;
-import org.apache.beam.sdk.values.PCollection;
 import org.apache.beam.sdk.options.Description;
-import org.bson.Document;
+import org.apache.beam.sdk.options.ValueProvider;
+import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
+import org.apache.beam.sdk.options.Default;
+import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableSchema;
+import com.google.cloud.secretmanager.v1.SecretManagerServiceClient;
+import com.google.cloud.secretmanager.v1.AccessSecretVersionResponse;
 import java.util.ArrayList;
 import java.util.List;
-
+import java.util.Set;
+import java.io.IOException;
+import java.io.Serializable;
+import org.bson.Document;
 
 
 /** Transforms & DoFns & Options for Teleport DatastoreIO. */
-public class MongoDbUtils {
+public class MongoDbUtils implements Serializable{
 
     /** Options for Reading MongoDb Documents. */
-    public interface  MongoDbOptions extends PipelineOptions {
+    public interface  MongoDbOptions extends PipelineOptions, DataflowPipelineOptions {
 
         @Description("MongoDB URI for connecting to MongoDB Cluster")
-        String getUri();
-
-        void setUri(String value);
+        @Default.String("mongouri")
+        ValueProvider<String> getMongoDbUri();
+        void setMongoDbUri(ValueProvider<String> getMongoDbUri);
 
         @Description("MongoDb Database name to read the data from")
-        String getDb();
-
-        void setDb(String value);
+        @Default.String("db")
+        ValueProvider<String> getDatabase();
+        void setDatabase(ValueProvider<String> database);
 
         @Description("MongoDb collection to read the data from")
-        String getColl();
+        @Default.String("collection")
+        ValueProvider<String> getCollection();
+        void setCollection(ValueProvider<String> collection);
 
-        void setColl(String value);
 
     }
 
-    public interface  BigQueryOptions extends PipelineOptions {
-
-        @Description("BigQuery Dataset Id to write to")
-        String getBigquerydataset();
-
-        void setBigquerydataset(String value);
+    public interface  BigQueryWriteOptions extends PipelineOptions, DataflowPipelineOptions {
 
         @Description("BigQuery Table name to write to")
-        String getBigquerytable();
+        @Default.String("bqtable")
+        ValueProvider<String> getOutputTableSpec();
+        void setOutputTableSpec(ValueProvider<String> outputTableSpec);
 
-        void setBigquerytable(String value);
+        @Description("BigQuery Table name to write to")
+        ValueProvider<String> getBigQueryLoadingTemporaryDirectory();
+        void setBigQueryLoadingTemporaryDirectory(ValueProvider<String> bigQueryLoadingTemporaryDirectory);
+    }
 
+    public interface  BigQueryReadOptions extends PipelineOptions, DataflowPipelineOptions {
+
+        @Description("BigQuery Table name to write to")
+        @Default.String("bqtable")
+        ValueProvider<String> getInputTableSpec();
+        void setInputTableSpec(ValueProvider<String> inputTableSpec);
+
+        @Description("BigQuery Table name to write to")
+        ValueProvider<String> getBigQueryLoadingTemporaryDirectory();
+        void setBigQueryLoadingTemporaryDirectory(ValueProvider<String> bigQueryLoadingTemporaryDirectory);
     }
 
 
-    public static TableSchema getTableFieldSchema(String uri, String db, String coll ){
+    public static TableSchema getTableFieldSchema(){
         List<TableFieldSchema> bigquerySchemaFields = new ArrayList<>();
         bigquerySchemaFields.add(new TableFieldSchema().setName("id").setType("STRING"));
         bigquerySchemaFields.add(new TableFieldSchema().setName("source_data").setType("STRING"));
@@ -83,14 +100,20 @@ public class MongoDbUtils {
         DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
         LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
 
-        StringBuffer sb = new StringBuffer();
-        sb.append(source_data);
-        sb.replace(1, 45, "");
-        String sourceDataUpdated = sb.toString();
         TableRow row = new TableRow()
                 .set("id",document.getObjectId("_id").toString())
-                .set("source_data",sourceDataUpdated)
+                .set("source_data",source_data)
                 .set("timestamp", localdate.format(time_format));
         return row;
+    }
+
+    public static String translateJDBCUrl(String jdbcUrlSecretName) {
+        try (SecretManagerServiceClient client = SecretManagerServiceClient.create()) {
+            AccessSecretVersionResponse response = client.accessSecretVersion(jdbcUrlSecretName);
+            String resp = response.getPayload().getData().toStringUtf8();
+            return resp;
+        } catch (IOException e) {
+            throw new RuntimeException("Unable to read JDBC URL secret");
+        }
     }
 }
