@@ -15,9 +15,8 @@
  */
 package com.google.cloud.teleport.templates;
 import com.google.cloud.teleport.templates.common.MongoDbUtils;
-import com.google.cloud.teleport.templates.common.MongoDbUtils.MongoDbReadOptions;
-import com.google.cloud.teleport.templates.common.MongoDbUtils.BigQueryOptions;
-import com.google.cloud.teleport.templates.common.JavascriptTextTransformer.TransformTextViaJavascript;
+import com.google.cloud.teleport.templates.common.MongoDbUtils.MongoDbOptions;
+import com.google.cloud.teleport.templates.common.MongoDbUtils.BigQueryWriteOptions;
 import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.CreateDisposition;
@@ -25,97 +24,77 @@ import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO.Write.WriteDisposition;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
-import org.apache.beam.sdk.options.Validation;
 import org.apache.beam.sdk.options.ValueProvider;
 import org.apache.beam.sdk.io.mongodb.MongoDbIO;
 import org.apache.beam.sdk.io.mongodb.MongoDbIO.Read;
-import org.apache.beam.sdk.values.PCollection;
 import org.bson.Document;
-
-import com.google.api.services.bigquery.model.TableReference;
 import org.apache.beam.sdk.transforms.SimpleFunction;
-import java.util.ArrayList;
 import org.apache.beam.sdk.transforms.MapElements;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableSchema;
 import com.google.api.services.bigquery.model.TableFieldSchema;
-import java.util.ArrayList;
-import java.util.List;
-import com.mongodb.util.JSON;
-import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.lang.reflect.Method;
+import com.google.api.services.bigquery.model.TableReference;
+import org.apache.beam.sdk.options.ValueProvider;
+import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
 import java.io.Serializable;
+import org.apache.beam.sdk.options.Default;
 
 
-
-
-import com.google.cloud.teleport.templates.common.BigQueryConverters;
-
-
-/** Dataflow template which copies documents to a BigQuery table. */
+/** Dataflow template which copies MongoDb document to a BigQuery table. */
 public class MongoDbToBigQuery implements Serializable {
-  public interface MongoDbToBigQueryOptions
-      extends PipelineOptions, MongoDbReadOptions, BigQueryOptions {
-    @Description("The BigQuery table spec to write the output to")
-      String getProjectId();
-      char getScope();
+    public interface MongoDbToBigQueryOptions
+            extends PipelineOptions, MongoDbOptions, BigQueryWriteOptions {
 
-      void setProjectId(String value);
-      void setScope(char value);
 
-  }
 
-  /**
-   * Runs a pipeline which reads in Documents from MongoDB
-   * a returns JSON string that conforms to the BigQuery TableRow spec and writes the
-   * TableRows to BigQuery.
-   *
-   * @param args arguments to the pipeline
-   */
+        String getProjectId();
+
+        void setProjectId(String value);
+    }
+
+    /**
+     * Runs a pipeline which reads in Documents from MongoDB
+     * a returns JSON string that conforms to the BigQuery TableRow spec and writes the
+     * TableRows to BigQuery.
+     *
+     * @param args arguments to the pipeline
+     */
     public static void main(String[] args) {
-        MongoDbToBigQueryOptions options =
-                  PipelineOptionsFactory.fromArgs(args).withValidation().as(MongoDbToBigQueryOptions.class);
-        Pipeline pipeline = Pipeline.create(options);
-        TableSchema bigquerySchema =
-                MongoDbUtils.getTableFieldSchema(options.getScope(), options.getUri(), options.getDb(), options.getColl());
 
-        /** Create BigQuery schema */
-        TableReference bigQyertTable = new TableReference();
-        bigQyertTable.setProjectId(options.getProjectId());
-        bigQyertTable.setDatasetId(options.getBigquerydataset());
-        bigQyertTable.setTableId(options.getBigquerytable());
-        char scope = options.getScope();
+        MongoDbToBigQueryOptions options =
+                PipelineOptionsFactory.fromArgs(args).withValidation()
+                        .as(MongoDbToBigQueryOptions.class);
+        Pipeline pipeline = Pipeline.create(options);
+        TableSchema bigquerySchema = MongoDbUtils.getTableFieldSchema();
 
         pipeline
                 .apply(
+                        "Reading from MongoDB ",
                         MongoDbIO.read().
                                 withBucketAuto(true).
-                                withUri(options.getUri()).
-                                withDatabase(options.getDb()).
-                                withCollection(options.getColl())
-                ).apply(
-                        "Read Documents",
-                        MapElements.via(
+                                withUri(MongoDbUtils.translateJDBCUrl(options.getMongoDbUri().get())).
+                                withDatabase(MongoDbUtils.translateJDBCUrl(options.getDatabase().get())).
+                                withCollection(MongoDbUtils.translateJDBCUrl(options.getCollection().get()))
+                )
+                .apply(
+                        "Read Documents", MapElements.via(
                                 new SimpleFunction<Document, TableRow>() {
                                     @Override
                                     public TableRow apply(Document document) {
-                                        return MongoDbUtils.generateTableRow(document, scope);
+                                        return MongoDbUtils.generateTableRow(document);
                                     }
                                 }
                         )
 
-                ).apply(
-                        BigQueryIO
-                                .writeTableRows()
-                                .withoutValidation()
-                                .to(bigQyertTable)
+                )
+                .apply(
+                        BigQueryIO.writeTableRows()
+                                .to(options.getOutputTableSpec())
                                 .withSchema(bigquerySchema)
                                 .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)
                                 .withWriteDisposition(BigQueryIO.Write.WriteDisposition.WRITE_TRUNCATE)
                 );
 
-        pipeline.run().waitUntilFinish();
+        pipeline.run();
     }
 }

@@ -15,175 +15,105 @@
  */
 package com.google.cloud.teleport.templates.common;
 
-import com.google.auto.value.AutoValue;
-import com.google.cloud.teleport.templates.common.ErrorConverters.ErrorMessage;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonObject;
-import com.google.protobuf.CodedOutputStream;
-import com.google.protobuf.InvalidProtocolBufferException;
-import java.util.Set;
-import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
-import org.apache.beam.sdk.transforms.Count;
-import org.bson.Document;
-import org.apache.beam.sdk.io.mongodb.MongoDbIO;
-import org.apache.beam.sdk.io.mongodb.MongoDbIO.Read;
-import org.apache.beam.sdk.options.Validation;
-import org.apache.beam.sdk.transforms.SimpleFunction;
+import org.apache.beam.sdk.options.Description;
+import org.apache.beam.sdk.options.ValueProvider;
+import org.apache.beam.sdk.options.ValueProvider.StaticValueProvider;
+import org.apache.beam.sdk.options.Default;
+import org.apache.beam.runners.dataflow.options.DataflowPipelineOptions;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import org.apache.beam.sdk.transforms.MapElements;
 import com.google.api.services.bigquery.model.TableRow;
 import com.google.api.services.bigquery.model.TableFieldSchema;
 import com.google.api.services.bigquery.model.TableSchema;
+import com.google.cloud.secretmanager.v1.SecretManagerServiceClient;
+import com.google.cloud.secretmanager.v1.AccessSecretVersionResponse;
 import java.util.ArrayList;
 import java.util.List;
-import java.text.SimpleDateFormat;
-import java.util.Date;
+import java.util.Set;
+import java.io.IOException;
+import java.io.Serializable;
+import org.bson.Document;
 
 
-
-import com.mongodb.client.MongoClient;
-import com.mongodb.client.MongoClients;
-import com.mongodb.client.MongoCollection;
-import com.mongodb.client.MongoDatabase;
-import static com.mongodb.client.model.Filters.eq;
-
-public class MongoDbUtils {
+/** Transforms & DoFns & Options for Teleport DatastoreIO. */
+public class MongoDbUtils implements Serializable{
 
     /** Options for Reading MongoDb Documents. */
-    public interface  MongoDbReadOptions extends PipelineOptions {
+    public interface  MongoDbOptions extends PipelineOptions, DataflowPipelineOptions {
 
         @Description("MongoDB URI for connecting to MongoDB Cluster")
-        String getUri();
-
-        void setUri(String value);
+        @Default.String("mongouri")
+        ValueProvider<String> getMongoDbUri();
+        void setMongoDbUri(ValueProvider<String> getMongoDbUri);
 
         @Description("MongoDb Database name to read the data from")
-        String getDb();
-
-        void setDb(String value);
+        @Default.String("db")
+        ValueProvider<String> getDatabase();
+        void setDatabase(ValueProvider<String> database);
 
         @Description("MongoDb collection to read the data from")
-        String getColl();
+        @Default.String("collection")
+        ValueProvider<String> getCollection();
+        void setCollection(ValueProvider<String> collection);
 
-        void setColl(String value);
 
     }
 
-    public interface  BigQueryOptions extends PipelineOptions {
-
-        @Description("BigQuery Dataset Id to write to")
-        String getBigquerydataset();
+    public interface  BigQueryWriteOptions extends PipelineOptions, DataflowPipelineOptions {
 
         @Description("BigQuery Table name to write to")
-        String getBigquerytable();
+        @Default.String("bqtable")
+        ValueProvider<String> getOutputTableSpec();
+        void setOutputTableSpec(ValueProvider<String> outputTableSpec);
 
-        void setBigquerydataset(String value);
+        @Description("BigQuery Table name to write to")
+        ValueProvider<String> getBigQueryLoadingTemporaryDirectory();
+        void setBigQueryLoadingTemporaryDirectory(ValueProvider<String> bigQueryLoadingTemporaryDirectory);
+    }
 
-        void setBigquerytable(String value);
+    public interface  BigQueryReadOptions extends PipelineOptions, DataflowPipelineOptions {
 
+        @Description("BigQuery Table name to write to")
+        @Default.String("bqtable")
+        ValueProvider<String> getInputTableSpec();
+        void setInputTableSpec(ValueProvider<String> inputTableSpec);
+
+        @Description("BigQuery Table name to write to")
+        ValueProvider<String> getBigQueryLoadingTemporaryDirectory();
+        void setBigQueryLoadingTemporaryDirectory(ValueProvider<String> bigQueryLoadingTemporaryDirectory);
     }
 
 
-    public static TableSchema getTableFieldSchema(char scope, String uri, String db, String coll ){
+    public static TableSchema getTableFieldSchema(){
         List<TableFieldSchema> bigquerySchemaFields = new ArrayList<>();
-        if(scope == '1'){
-            bigquerySchemaFields.add(new TableFieldSchema().setName("Source_data").setType("STRING"));
-            bigquerySchemaFields.add(new TableFieldSchema().setName("timestamp").setType("TIMESTAMP"));
-        }else if(scope == '2'){
-            MongoClient mongoClient = MongoClients.create(uri);
-            MongoDatabase database = mongoClient.getDatabase(db);
-            MongoCollection<Document> collection = database.getCollection(coll);
-            Document doc = collection.find().first();
-            doc.forEach((key, value) ->
-                {
-                    if(value.getClass().getName()=="java.lang.String")
-                    {
-                        bigquerySchemaFields.add(
-                                new TableFieldSchema()
-                                        .setName(key)
-                                        .setType("STRING")
-                        );
-                    }
-                    else if(value.getClass().getName()=="java.lang.Integer")
-                    {
-                        bigquerySchemaFields.add(
-                                new TableFieldSchema()
-                                        .setName(key)
-                                        .setType("INT64")
-                        );
-                    }
-                    else if(value.getClass().getName()=="java.lang.Long")
-                    {
-                        bigquerySchemaFields.add(
-                                new TableFieldSchema()
-                                        .setName(key)
-                                        .setType("FLOAT")
-                        );
-                    }else if(value.getClass().getName()=="java.util.Date")
-                    {
-                        bigquerySchemaFields.add(
-                                new TableFieldSchema()
-                                        .setName(key)
-                                        .setType("DATE")
-                        );
-                    }
-                    else
-                    {
-                        bigquerySchemaFields.add(
-                                new TableFieldSchema()
-                                        .setName(key)
-                                        .setType("STRING")
-                        );
-                    }
-                }
-            );
-        }
-
+        bigquerySchemaFields.add(new TableFieldSchema().setName("id").setType("STRING"));
+        bigquerySchemaFields.add(new TableFieldSchema().setName("source_data").setType("STRING"));
+        bigquerySchemaFields.add(new TableFieldSchema().setName("timestamp").setType("TIMESTAMP"));
         TableSchema bigquerySchema = new TableSchema().setFields(bigquerySchemaFields);
         return bigquerySchema;
     }
 
-    public static TableRow generateDocumentTableRow(Document document){
+    public static TableRow generateTableRow(Document document){
         String source_data = document.toJson();
         DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
         LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
+
         TableRow row = new TableRow()
-                .set("Source_data",source_data)
+                .set("id",document.getObjectId("_id").toString())
+                .set("source_data",source_data)
                 .set("timestamp", localdate.format(time_format));
         return row;
     }
 
-    public static TableRow generateFieldTableRow(Document document){
-        TableRow row = new TableRow();
-        document.forEach((key, value) -> {
-            row.set(key, value.toString());
-        });
-        return row;
-    }
-
-    public static TableRow generateTableRow(Document document, char scope){
-
-        if(scope == '1'){
-            String source_data = document.toJson();
-            DateTimeFormatter time_format = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss.SSS");
-            LocalDateTime localdate = LocalDateTime.now(ZoneId.of("UTC"));
-            TableRow row = new TableRow()
-                    .set("Source_data",source_data)
-                    .set("timestamp", localdate.format(time_format));
-            return row;
-        }else {
-            TableRow row = new TableRow();
-            document.forEach((key, value) -> {
-                if(value.getClass().getName()=="java.util.Date"){
-                    row.set(key, value.toString());
-                }else{
-                    row.set(key, value.toString());
-                }
-            });
-            return row;
+    public static String translateJDBCUrl(String jdbcUrlSecretName) {
+        try (SecretManagerServiceClient client = SecretManagerServiceClient.create()) {
+            AccessSecretVersionResponse response = client.accessSecretVersion(jdbcUrlSecretName);
+            String resp = response.getPayload().getData().toStringUtf8();
+            return resp;
+        } catch (IOException e) {
+            throw new RuntimeException("Unable to read JDBC URL secret");
         }
     }
 }
