@@ -48,9 +48,6 @@ public class BigQueryToDatastore {
         PipelineOptionsFactory.fromArgs(args).withValidation().as(BigQueryToDatastoreOptions.class);
 
     Pipeline pipeline = Pipeline.create(options);
-
-    // Read from BigQuery and convert data to Datastore Entity format with 2 possible outcomes,
-    // success or failure, based on the possibility to create valid Entity keys from BQ data
     TupleTag<Entity> successTag = new TupleTag<Entity>() {};
     TupleTag<String> failureTag = new TupleTag<String>("failures") {};
     PCollectionTuple entities =

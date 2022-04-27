@@ -108,7 +108,6 @@ public class BigQueryConverters {
 
     @Override
     public PCollection<TableRow> expand(PCollection<String> stringPCollection) {
-      System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>"+stringPCollection);
       return stringPCollection.apply(
           "JsonToTableRow",
           MapElements.via(
@@ -334,7 +333,6 @@ public class BigQueryConverters {
     } catch (IOException e) {
       throw new RuntimeException("Failed to serialize json to table row: " + json, e);
     }
-    System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>"+row+">>>>>>>>>>>>>>>>>>"+row.getClass().getName());
     return row;
   }
 
