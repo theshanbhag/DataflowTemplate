@@ -65,16 +65,21 @@ public class MongoDbToBigQuery implements Serializable {
                 PipelineOptionsFactory.fromArgs(args).withValidation()
                         .as(MongoDbToBigQueryOptions.class);
         Pipeline pipeline = Pipeline.create(options);
-        TableSchema bigquerySchema = MongoDbUtils.getTableFieldSchema();
+
+        String mongoDbURI = MongoDbUtils.translateJDBCUrl(options.getMongoDbUri().get());
+        String database = MongoDbUtils.translateJDBCUrl(options.getDatabase().get());
+        String collection = MongoDbUtils.translateJDBCUrl(options.getCollection().get());
+
+        TableSchema bigquerySchema = MongoDbUtils.getTableFieldSchema(mongoDbURI, database, collection);
 
         pipeline
                 .apply(
                         "Reading from MongoDB ",
                         MongoDbIO.read().
                                 withBucketAuto(true).
-                                withUri(MongoDbUtils.translateJDBCUrl(options.getMongoDbUri().get())).
-                                withDatabase(MongoDbUtils.translateJDBCUrl(options.getDatabase().get())).
-                                withCollection(MongoDbUtils.translateJDBCUrl(options.getCollection().get()))
+                                withUri(mongoDbURI).
+                                withDatabase(database).
+                                withCollection(collection)
                 )
                 .apply(
                         "Read Documents", MapElements.via(
@@ -88,7 +93,8 @@ public class MongoDbToBigQuery implements Serializable {
 
                 )
                 .apply(
-                        BigQueryIO.writeTableRows()
+                        BigQueryIO
+                                .writeTableRows()
                                 .to(options.getOutputTableSpec())
                                 .withSchema(bigquerySchema)
                                 .withCreateDisposition(BigQueryIO.Write.CreateDisposition.CREATE_IF_NEEDED)

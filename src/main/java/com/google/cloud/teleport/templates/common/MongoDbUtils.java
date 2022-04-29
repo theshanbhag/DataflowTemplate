@@ -86,7 +86,12 @@ public class MongoDbUtils implements Serializable{
     }
 
 
-    public static TableSchema getTableFieldSchema(){
+    public static TableSchema getTableFieldSchema(String uri, String database, String collection){
+
+        document.forEach((key, value) ->
+        {
+            row.set("",)
+        });
         List<TableFieldSchema> bigquerySchemaFields = new ArrayList<>();
         bigquerySchemaFields.add(new TableFieldSchema().setName("id").setType("STRING"));
         bigquerySchemaFields.add(new TableFieldSchema().setName("source_data").setType("STRING"));
@@ -116,4 +121,19 @@ public class MongoDbUtils implements Serializable{
             throw new RuntimeException("Unable to read JDBC URL secret");
         }
     }
+
+    public static String getTableSchemaDataType(String s){
+        switch(s){
+            case "INTEGER": return "INTEGER";
+            case "FLOAT": return "FLOAT";
+            case "BOOLEAN": return "BOOLEAN";
+            case "STRING": return "STRING";
+            case "TIMESTAMP": return "TIMESTAMP";
+            case "DATETIME": return "DATETIME";
+            case "DATE": return "DATE";
+            case "RECORD": return "RECORD";
+        }
+        return "STRING";
+    }
+
 }
