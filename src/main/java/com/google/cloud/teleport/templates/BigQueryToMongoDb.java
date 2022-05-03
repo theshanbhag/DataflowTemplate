@@ -6,8 +6,10 @@ import org.apache.beam.sdk.Pipeline;
 import org.apache.beam.sdk.extensions.gcp.options.GcpOptions;
 import org.apache.beam.sdk.io.gcp.bigquery.BigQueryIO;
 import org.apache.beam.sdk.io.gcp.pubsub.PubsubIO;
-import org.apache.beam.sdk.io.mongodb.MongoDbIO;
-import org.apache.beam.sdk.io.mongodb.MongoDbIO.Write;
+//import org.apache.beam.sdk.io.mongodb.MongoDbIO;
+//import org.apache.beam.sdk.io.mongodb.MongoDbIO.Write;
+import com.google.cloud.teleport.templates.mongoDbIO.MongoDbIO;
+import com.google.cloud.teleport.templates.mongoDbIO.MongoDbIO.Write;
 import org.apache.beam.sdk.options.Description;
 import org.apache.beam.sdk.options.PipelineOptions;
 import org.apache.beam.sdk.options.PipelineOptionsFactory;
@@ -33,17 +35,17 @@ public class BigQueryToMongoDb implements Serializable{
     public static void main(String[] args) throws Exception {
 
         Options options = PipelineOptionsFactory.fromArgs(args).withValidation().as(Options.class);
+
+
         Pipeline pipeline = Pipeline.create(options);
 
-        PCollection<TableRow> bigQueryDataset =
-                pipeline.apply(
+        pipeline
+                .apply(
                         BigQueryIO
                                 .readTableRows()
                                 .withoutValidation()
                                 .from(options.getInputTableSpec())
-                );
-
-        bigQueryDataset
+                )
                 .apply("bigQueryDataset", MapElements.via
                         (new SimpleFunction<TableRow, Document>() {
                             @Override
@@ -59,11 +61,11 @@ public class BigQueryToMongoDb implements Serializable{
                 )
                 .apply(
                         MongoDbIO.write()
-                                .withUri(MongoDbUtils.translateJDBCUrl(options.getMongoDbUri().get()))
-                                .withDatabase(MongoDbUtils.translateJDBCUrl(options.getDatabase().get()))
-                                .withCollection(MongoDbUtils.translateJDBCUrl(options.getCollection().get())));
+                                .withUri(options.getMongoDbUri())
+                                .withDatabase(options.getDatabase())
+                                .withCollection(options.getCollection())
+                );
 
         pipeline.run();
     }
-
 }
